@@ -4,7 +4,17 @@ import (
 	"auth/internal/closer"
 	"auth/internal/config"
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
+	"os"
+)
+
+const (
+	envLocal = "local"
+	envProd  = "prod"
+	envDev   = "dev"
+	envStage = "stage"
 )
 
 type App struct {
@@ -20,7 +30,7 @@ func NewApp(ctx context.Context) (*App, error) {
 		return nil, err
 	}
 
-	//log := setupLogger(cfg.Env)
+	slog.Info("App initialized")
 
 	return a, nil
 }
@@ -37,6 +47,7 @@ func (a *App) Run() error {
 func (a *App) initDeps(ctx context.Context) error {
 	inits := []func(context.Context) error{
 		a.initConfig,
+		a.initLogger,
 		a.initServiceProvider,
 	}
 
@@ -50,6 +61,45 @@ func (a *App) initDeps(ctx context.Context) error {
 	return nil
 }
 
+func (a *App) initLogger(_ context.Context) error {
+	env := os.Getenv("ENV")
+
+	logFile, err := os.OpenFile("../../var/log.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		return err
+	}
+	closer.Add(func() error {
+		return logFile.Close()
+	})
+
+	var log *slog.Logger
+	loggerOpts := &slog.HandlerOptions{}
+	logWriters := []io.Writer{logFile, os.Stdout}
+
+	switch env {
+	case envLocal:
+		loggerOpts.AddSource = true
+		loggerOpts.Level = slog.LevelDebug
+	case envProd:
+		loggerOpts.AddSource = false
+		loggerOpts.Level = slog.LevelInfo
+		logWriters = []io.Writer{logFile}
+	case envDev:
+		loggerOpts.Level = slog.LevelDebug
+	case envStage:
+		loggerOpts.Level = slog.LevelDebug
+	default:
+		loggerOpts.AddSource = false
+		loggerOpts.Level = slog.LevelInfo
+	}
+
+	w := io.MultiWriter(logWriters...)
+	log = slog.New(slog.NewJSONHandler(w, loggerOpts))
+	slog.SetDefault(log)
+
+	return nil
+}
+
 func (a *App) initConfig(_ context.Context) error {
 	config.MustLoad()
 	return nil
@@ -59,32 +109,3 @@ func (a *App) initServiceProvider(_ context.Context) error {
 	a.serviceProvider = newServiceProvider()
 	return nil
 }
-
-//func setupLogger(env string) *slog.Logger {
-//	var log *slog.Logger
-//
-//	switch env {
-//	case envLocal:
-//		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-//			Level: slog.LevelDebug,
-//		}))
-//	case envProd:
-//		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-//			Level: slog.LevelInfo,
-//		}))
-//	case envDev:
-//		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-//			Level: slog.LevelDebug,
-//		}))
-//	case envStage:
-//		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-//			Level: slog.LevelDebug,
-//		}))
-//	default:
-//		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-//			Level: slog.LevelInfo,
-//		}))
-//	}
-//
-//	return log
-//}

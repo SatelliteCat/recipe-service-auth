@@ -12,13 +12,6 @@ import (
 	"os/signal"
 )
 
-const (
-	envLocal = "local"
-	envProd  = "prod"
-	envDev   = "dev"
-	envStage = "stage"
-)
-
 func main() {
 	ctx := context.Background()
 

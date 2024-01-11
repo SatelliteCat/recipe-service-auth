@@ -1,7 +1,7 @@
 package closer
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"sync"
@@ -79,7 +79,7 @@ func (c *Closer) CloseAll() {
 
 		for i := 0; i < cap(errs); i++ {
 			if err := <-errs; err != nil {
-				log.Println("error returned from Closer")
+				slog.Error("error returned from Closer", slog.String("error", err.Error()))
 			}
 		}
 	})
