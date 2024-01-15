@@ -1,8 +1,8 @@
 package app
 
 import (
-	"auth/internal/closer"
 	"auth/internal/config"
+	"auth/internal/lib/closer"
 	"context"
 	"io"
 	"log/slog"

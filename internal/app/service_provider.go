@@ -1,7 +1,7 @@
 package app
 
 import (
-	"auth/internal/closer"
+	"auth/internal/lib/closer"
 	"auth/internal/repository"
 	userRepository "auth/internal/repository/user"
 	"auth/internal/service"
