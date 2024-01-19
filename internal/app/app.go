@@ -2,12 +2,16 @@ package app
 
 import (
 	"auth/internal/config"
+	mwLogger "auth/internal/http_server/middleware/logger"
 	"auth/internal/lib/closer"
 	"context"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 )
 
 const (
@@ -41,6 +45,11 @@ func (a *App) Run() error {
 		closer.Wait()
 	}()
 
+	if err := a.RunHttpServer(); err != nil {
+		slog.Error("failed to run http server", slog.String("error", err.Error()))
+		return err
+	}
+
 	return nil
 }
 
@@ -49,6 +58,7 @@ func (a *App) initDeps(ctx context.Context) error {
 		a.initConfig,
 		a.initLogger,
 		a.initServiceProvider,
+		a.initHttpServer,
 	}
 
 	for _, f := range inits {
@@ -108,4 +118,39 @@ func (a *App) initConfig(_ context.Context) error {
 func (a *App) initServiceProvider(_ context.Context) error {
 	a.serviceProvider = newServiceProvider()
 	return nil
+}
+
+func (a *App) initHttpServer(_ context.Context) error {
+	router := chi.NewRouter()
+	router.Use(middleware.RequestID)
+	router.Use(mwLogger.New(slog.Default()))
+	router.Use(middleware.Recoverer)
+	router.Use(middleware.URLFormat)
+
+	//router.Get("/", getUsersHandler)
+
+	srv := &http.Server{
+		Addr:         os.Getenv("HTTP_SERVER_ADDRESS") + ":" + os.Getenv("HTTP_SERVER_PORT"),
+		Handler:      router,
+		ReadTimeout:  mustParseDuration(os.Getenv("HTTP_SERVER_TIMEOUT")),
+		WriteTimeout: mustParseDuration(os.Getenv("HTTP_SERVER_TIMEOUT")),
+		IdleTimeout:  mustParseDuration(os.Getenv("HTTP_SERVER_IDLE_TIMEOUT")),
+	}
+
+	a.httpServer = srv
+
+	return nil
+}
+
+func (a *App) RunHttpServer() error {
+	return a.httpServer.ListenAndServe()
+}
+
+func mustParseDuration(s string) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		slog.Error("failed to parse duration", slog.String("error", err.Error()), slog.String("string", s))
+		panic(err)
+	}
+	return d
 }

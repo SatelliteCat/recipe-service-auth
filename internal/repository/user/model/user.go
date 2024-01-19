@@ -6,16 +6,16 @@ import (
 )
 
 type User struct {
-	UUID      string
-	Profile   UserProfile
-	CreatedAt time.Time
-	UpdatedAt sql.NullTime
+	UUID      string       `db:"uuid"`
+	Profile   UserProfile  `db:""`
+	CreatedAt time.Time    `db:"created_at"`
+	UpdatedAt sql.NullTime `db:"updated_at"`
 }
 
 type UserProfile struct {
-	FirstName string
-	LastName  string
-	Age       int64
-	CreatedAt time.Time
-	UpdatedAt sql.NullTime
+	FirstName string       `db:"first_name"`
+	LastName  string       `db:"last_name"`
+	Age       int64        `db:"age"`
+	CreatedAt time.Time    `db:"created_at"`
+	UpdatedAt sql.NullTime `db:"updated_at"`
 }

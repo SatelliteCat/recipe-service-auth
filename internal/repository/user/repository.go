@@ -1,6 +1,7 @@
 package user
 
 import (
+	"auth/internal/client/db"
 	"auth/internal/model"
 	"auth/internal/repository"
 	dbModel "auth/internal/repository/user/model"
@@ -23,11 +24,12 @@ var _ repository.UserRepository = (*userRepository)(nil)
 
 type userRepository struct {
 	dbPool *pgxpool.Pool
+	db     db.Client
 }
 
-func NewUserRepository(dbPool *pgxpool.Pool) *userRepository {
+func NewUserRepository(db db.Client) *userRepository {
 	return &userRepository{
-		dbPool: dbPool,
+		db: db,
 	}
 }
 
@@ -46,8 +48,13 @@ func (r *userRepository) GetByUUID(ctx context.Context, uuid string) (*model.Use
 		return nil, err
 	}
 
+	q := db.Query{
+		Name:     "query_user_repo_get_by_uuid",
+		QueryRaw: query,
+	}
+
 	var user dbModel.User
-	err = r.dbPool.QueryRow(ctx, query, args...).Scan(&user.UUID, &user.CreatedAt)
+	err = r.db.DB().ScanOneContext(ctx, &user, q, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
