@@ -2,6 +2,7 @@ package app
 
 import (
 	"auth/internal/config"
+	"auth/internal/http_server/handler/user"
 	mwLogger "auth/internal/http_server/middleware/logger"
 	"auth/internal/lib/closer"
 	"context"
@@ -120,14 +121,16 @@ func (a *App) initServiceProvider(_ context.Context) error {
 	return nil
 }
 
-func (a *App) initHttpServer(_ context.Context) error {
+func (a *App) initHttpServer(ctx context.Context) error {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(mwLogger.New(slog.Default()))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 
-	//router.Get("/", getUsersHandler)
+	router.Get("/", user.GetUser(ctx, a.serviceProvider))
+	router.Get("/{uuid}", user.GetUser(ctx, a.serviceProvider))
+	router.Post("/", user.CreateUser(ctx, a.serviceProvider))
 
 	srv := &http.Server{
 		Addr:         os.Getenv("HTTP_SERVER_ADDRESS") + ":" + os.Getenv("HTTP_SERVER_PORT"),

@@ -9,11 +9,13 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8083:8083"
+    depends_on:
+      - user_db
 
   user_db:
     image: postgres:15-alpine3.19
     ports:
-      - "${DB_PORT}:5432"
+      - "${DB_PORT_DOCKER}:5432"
     environment:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}

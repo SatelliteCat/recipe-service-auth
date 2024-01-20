@@ -9,6 +9,7 @@ import (
 	"errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"log/slog"
 
 	sq "github.com/Masterminds/squirrel"
 )
@@ -18,6 +19,7 @@ const (
 	userProfileTableName = "user_profile"
 	uuidColName          = "uuid"
 	createdAtColName     = "created_at"
+	updatedAtColName     = "updated_at"
 )
 
 var _ repository.UserRepository = (*userRepository)(nil)
@@ -33,7 +35,28 @@ func NewUserRepository(db db.Client) *userRepository {
 	}
 }
 
-func (r *userRepository) Create(_ context.Context, user *model.User) error {
+func (r *userRepository) Create(ctx context.Context, user *model.User) error {
+	builder := sq.Insert(userTableName).
+		Columns(uuidColName, createdAtColName).
+		Values(user.UUID, user.CreatedAt).
+		PlaceholderFormat(sq.Dollar).
+		Suffix("RETURNING " + uuidColName)
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return err
+	}
+
+	q := db.Query{
+		Name:     "query_user_repo_create",
+		QueryRaw: query,
+	}
+
+	info, err := r.db.DB().ExecContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+
+	slog.Debug("inserted", slog.Any("info", info))
 
 	return nil
 }

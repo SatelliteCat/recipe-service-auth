@@ -35,6 +35,7 @@ func (s *serviceProvider) DbClient(ctx context.Context) db.Client {
 	dsn := fmt.Sprintf("host=%s port=%s dbname=%s user=%s password=%s sslmode=disable",
 		os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_NAME"),
 		os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"))
+	slog.Debug("dsn", slog.String("dsn", dsn))
 
 	dbClient, err := pg.New(ctx, dsn)
 	if err != nil {
@@ -42,10 +43,11 @@ func (s *serviceProvider) DbClient(ctx context.Context) db.Client {
 		panic(err)
 	}
 
-	if err = dbClient.DB().Ping(context.Background()); err != nil {
+	if err = dbClient.DB().Ping(ctx); err != nil {
 		slog.Error("failed to ping to database", slog.String("error", err.Error()))
 		panic(err)
 	}
+	slog.Debug("connected to database")
 
 	closer.Add(dbClient.Close)
 
