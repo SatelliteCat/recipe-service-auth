@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -46,10 +47,19 @@ func (a *App) Run() error {
 		closer.Wait()
 	}()
 
-	if err := a.RunHttpServer(); err != nil {
-		slog.Error("failed to run http server", slog.String("error", err.Error()))
-		return err
-	}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		if err := a.RunHttpServer(); err != nil {
+			slog.Error("failed to run http server", slog.String("error", err.Error()))
+			panic(err)
+		}
+	}()
+
+	wg.Wait()
 
 	return nil
 }
@@ -128,9 +138,10 @@ func (a *App) initHttpServer(ctx context.Context) error {
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 
-	router.Get("/", user.GetUser(ctx, a.serviceProvider))
-	router.Get("/{uuid}", user.GetUser(ctx, a.serviceProvider))
-	router.Post("/", user.CreateUser(ctx, a.serviceProvider))
+	userHandler := user.NewHandler(a.serviceProvider)
+
+	router.Get("/{uuid}", userHandler.GetUser(ctx))
+	router.Post("/", userHandler.CreateUser(ctx))
 
 	srv := &http.Server{
 		Addr:         os.Getenv("HTTP_SERVER_ADDRESS") + ":" + os.Getenv("HTTP_SERVER_PORT"),

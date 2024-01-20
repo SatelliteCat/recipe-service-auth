@@ -17,30 +17,42 @@ type di interface {
 	UserService(ctx context.Context) service.UserService
 }
 
+type handler struct {
+	di di
+}
+
+func NewHandler(di di) *handler {
+	return &handler{
+		di: di,
+	}
+}
+
 type userCreateRequest struct {
 }
 
-func CreateUser(ctx context.Context, container di) http.HandlerFunc {
+func (h *handler) CreateUser(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req userCreateRequest
 
 		err := render.DecodeJSON(r.Body, &req)
 		if errors.Is(err, io.EOF) {
 			// Такую ошибку встретим, если получили запрос с пустым телом. Обработаем её отдельно
-			slog.Error("r body is empty")
+			slog.Error("request body is empty")
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, struct {
-				Status string `json:"status"`
+				Error string `json:"error"`
 			}{
-				Status: "error",
+				Error: "request body is empty",
 			})
 			return
 		}
 		if err != nil {
 			slog.Error("failed to decode request body", sl.Err(err))
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, struct {
-				Status string `json:"status"`
+				Error string `json:"error"`
 			}{
-				Status: "error",
+				Error: "failed to decode request body",
 			})
 			return
 		}
@@ -48,13 +60,14 @@ func CreateUser(ctx context.Context, container di) http.HandlerFunc {
 		slog.Info("request body decoded", slog.Any("request", req))
 
 		user := &model.User{}
-		err = container.UserService(ctx).Create(ctx, user)
+		err = h.di.UserService(ctx).Create(ctx, user)
 		if err != nil {
 			slog.Error("failed to create user", sl.Err(err))
+			render.Status(r, http.StatusUnprocessableEntity)
 			render.JSON(w, r, struct {
-				Status string `json:"status"`
+				Error string `json:"error"`
 			}{
-				Status: "error",
+				Error: "failed to create user",
 			})
 			return
 		}
@@ -67,28 +80,30 @@ func CreateUser(ctx context.Context, container di) http.HandlerFunc {
 	}
 }
 
-func GetUser(ctx context.Context, container di) http.HandlerFunc {
+func (h *handler) GetUser(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userUuid := chi.URLParam(r, "uuid")
-		user, err := container.UserService(ctx).GetByUUID(ctx, userUuid)
+		user, err := h.di.UserService(ctx).GetByUUID(ctx, userUuid)
 		if err != nil {
-			slog.Error("failed to get user", sl.Err(err))
-			render.JSON(w, r, struct {
-				Status string `json:"status"`
-			}{
-				Status: "error",
-			})
+			slog.Error("failed to get user", sl.Err(err), slog.String("uuid", userUuid))
+			render.Status(r, http.StatusUnprocessableEntity)
+			render.JSON(w, r, struct{}{})
+			return
+		}
+		if user == nil {
+			render.Status(r, http.StatusNotFound)
+			render.JSON(w, r, struct{}{})
 			return
 		}
 
 		render.JSON(w, r, struct {
-			Status     string `json:"status"`
-			Uuid       string `json:"uuid"`
-			Created_at string `json:"created_at"`
+			Status    string `json:"status"`
+			Uuid      string `json:"uuid"`
+			CreatedAt string `json:"created_at"`
 		}{
-			Status:     "OK",
-			Uuid:       user.UUID,
-			Created_at: user.CreatedAt.String(),
+			Status:    "OK",
+			Uuid:      user.UUID,
+			CreatedAt: user.CreatedAt.String(),
 		})
 	}
 }
