@@ -5,11 +5,16 @@ import (
 	"auth/internal/http_server/handler/user"
 	mwLogger "auth/internal/http_server/middleware/logger"
 	"auth/internal/lib/closer"
+	desc "auth/pkg/user_v1"
 	"context"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/reflection"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"sync"
@@ -26,6 +31,7 @@ const (
 type App struct {
 	serviceProvider *serviceProvider
 	httpServer      *http.Server
+	grpcServer      *grpc.Server
 }
 
 func NewApp(ctx context.Context) (*App, error) {
@@ -48,13 +54,22 @@ func (a *App) Run() error {
 	}()
 
 	wg := sync.WaitGroup{}
-	wg.Add(1)
+	wg.Add(2)
 
 	go func() {
 		defer wg.Done()
 
-		if err := a.RunHttpServer(); err != nil {
+		if err := a.runHttpServer(); err != nil {
 			slog.Error("failed to run http server", slog.String("error", err.Error()))
+			panic(err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		if err := a.runGRPCServer(); err != nil {
+			slog.Error("failed to run grpc server", slog.String("error", err.Error()))
 			panic(err)
 		}
 	}()
@@ -70,6 +85,7 @@ func (a *App) initDeps(ctx context.Context) error {
 		a.initLogger,
 		a.initServiceProvider,
 		a.initHttpServer,
+		a.initGRPCServer,
 	}
 
 	for _, f := range inits {
@@ -156,8 +172,32 @@ func (a *App) initHttpServer(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) RunHttpServer() error {
+func (a *App) initGRPCServer(ctx context.Context) error {
+	a.grpcServer = grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
+	reflection.Register(a.grpcServer)
+	desc.RegisterUserV1Server(a.grpcServer, a.serviceProvider.UserImpl(ctx))
+
+	return nil
+}
+
+func (a *App) runHttpServer() error {
 	return a.httpServer.ListenAndServe()
+}
+
+func (a *App) runGRPCServer() error {
+	slog.Info("GRPC server is running", slog.String("address", a.serviceProvider.GRPCConfig().Address()))
+
+	list, err := net.Listen("tcp", a.serviceProvider.GRPCConfig().Address())
+	if err != nil {
+		return err
+	}
+
+	err = a.grpcServer.Serve(list)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func mustParseDuration(s string) time.Duration {
