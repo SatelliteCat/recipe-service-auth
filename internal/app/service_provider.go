@@ -3,6 +3,8 @@ package app
 import (
 	"auth/internal/client/db"
 	"auth/internal/client/db/pg"
+	"auth/internal/config"
+	"auth/internal/grpc_server/user"
 	"auth/internal/lib/closer"
 	"auth/internal/repository"
 	userRepository "auth/internal/repository/user"
@@ -11,20 +13,38 @@ import (
 	"auth/internal/transaction"
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 )
 
 type serviceProvider struct {
+	grpcConfig config.GRPCConfig
+
 	dbClient       db.Client
 	txManager      db.TxManager
 	userRepository repository.UserRepository
 
 	userService service.UserService
+
+	userImpl *user.Implementation
 }
 
 func newServiceProvider() *serviceProvider {
 	return &serviceProvider{}
+}
+
+func (s *serviceProvider) GRPCConfig() config.GRPCConfig {
+	if s.grpcConfig == nil {
+		cfg, err := config.NewGRPCConfig()
+		if err != nil {
+			log.Fatalf("failed to get grpc config: %s", err.Error())
+		}
+
+		s.grpcConfig = cfg
+	}
+
+	return s.grpcConfig
 }
 
 func (s *serviceProvider) DbClient(ctx context.Context) db.Client {
@@ -80,4 +100,12 @@ func (s *serviceProvider) UserService(ctx context.Context) service.UserService {
 	}
 
 	return s.userService
+}
+
+func (s *serviceProvider) UserImpl(ctx context.Context) *user.Implementation {
+	if s.userImpl == nil {
+		s.userImpl = user.NewImplementation(s.UserService(ctx))
+	}
+
+	return s.userImpl
 }
